@@ -1,0 +1,154 @@
+// ============================================================
+// VOLT-MARKET SEO DASHBOARD — публикация на GitHub Pages
+// ============================================================
+
+const METRICS = [
+  'Трафик Поиск','Коммерческий','% Коммерческий',
+  'Информационный','% Информационный',
+  'Орг трафик (Яндекс)','Орг трафик (Гугл)',
+];
+
+const KNOWN_MONTHS_FULL = [
+  { label: 'Сен 2025', year: 2025, month: 9  },
+  { label: 'Окт 2025', year: 2025, month: 10 },
+  { label: 'Ноя 2025', year: 2025, month: 11 },
+  { label: 'Дек 2025', year: 2025, month: 12 },
+  { label: 'Янв 2026', year: 2026, month: 1  },
+  { label: 'Фев 2026', year: 2026, month: 2  },
+  { label: 'Мар 2026', year: 2026, month: 3  },
+  { label: 'Апр 2026', year: 2026, month: 4  },
+];
+
+const GITHUB_OWNER = 'vervsebya-dotcom';
+const GITHUB_REPO  = 'SEO_Voltmarket';
+const GITHUB_FILE  = 'data.json';
+// Вставьте ваш GitHub Personal Access Token:
+const GITHUB_TOKEN = 'ВАШ_GITHUB_TOKEN';
+
+// ────────────────────────────────────────────────────────────
+function onOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu('📊 SEO Дашборд')
+    .addItem('🌐 Открыть дашборд', 'openDashboard')
+    .addItem('🚀 Опубликовать на GitHub', 'publishToGitHub')
+    .addSeparator()
+    .addItem('👁 Предпросмотр', 'showDashboard')
+    .addToUi();
+}
+
+function openDashboard() {
+  const url = 'https://vervsebya-dotcom.github.io/SEO_Voltmarket/';
+  const html = HtmlService.createHtmlOutput(
+    `<script>window.open('${url}','_blank');google.script.host.close();</script>`
+  ).setWidth(10).setHeight(10);
+  SpreadsheetApp.getUi().showModalDialog(html, 'Открываю...');
+}
+
+// ────────────────────────────────────────────────────────────
+function publishToGitHub() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const seoSheet = ss.getSheetByName('SEO');
+  if (!seoSheet) { SpreadsheetApp.getUi().alert('Нет листа SEO!'); return; }
+
+  const data = seoSheet.getDataRange().getValues();
+  const monthBlocks = findMonthBlocks(data);
+  if (!monthBlocks.length) { SpreadsheetApp.getUi().alert('Месяцы не найдены!'); return; }
+
+  const months = monthBlocks.map((block, i) => {
+    const nextRow = (i + 1 < monthBlocks.length) ? monthBlocks[i+1].headerRow : data.length;
+    const m = extractMetrics(data, block.headerRow, nextRow);
+    return {
+      label:   KNOWN_MONTHS_FULL[i] ? KNOWN_MONTHS_FULL[i].label : block.label,
+      year:    block.year,
+      month:   block.month,
+      metrics: m,
+    };
+  });
+
+  const payload = {
+    updated: new Date().toLocaleString('ru-RU'),
+    months:  months,
+  };
+
+  const json    = JSON.stringify(payload, null, 2);
+  const encoded = Utilities.base64Encode(Utilities.newBlob(json).getBytes());
+
+  // Получаем SHA текущего файла (нужен для обновления)
+  let sha = null;
+  try {
+    const getResp = UrlFetchApp.fetch(
+      `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${GITHUB_FILE}`,
+      { headers: { Authorization: 'token ' + GITHUB_TOKEN, Accept: 'application/vnd.github.v3+json' }, muteHttpExceptions: true }
+    );
+    if (getResp.getResponseCode() === 200) {
+      sha = JSON.parse(getResp.getContentText()).sha;
+    }
+  } catch(e) {}
+
+  // Пушим файл
+  const body = { message: 'Update SEO data ' + new Date().toISOString(), content: encoded };
+  if (sha) body.sha = sha;
+
+  const resp = UrlFetchApp.fetch(
+    `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${GITHUB_FILE}`,
+    {
+      method: 'PUT',
+      headers: { Authorization: 'token ' + GITHUB_TOKEN, Accept: 'application/vnd.github.v3+json', 'Content-Type': 'application/json' },
+      payload: JSON.stringify(body),
+      muteHttpExceptions: true,
+    }
+  );
+
+  if (resp.getResponseCode() === 200 || resp.getResponseCode() === 201) {
+    SpreadsheetApp.getUi().alert('✅ Данные опубликованы!\n\nhttps://vervsebya-dotcom.github.io/SEO_Voltmarket/\n\nОбновление займёт ~1 минуту.');
+  } else {
+    SpreadsheetApp.getUi().alert('❌ Ошибка: ' + resp.getContentText());
+  }
+}
+
+// ────────────────────────────────────────────────────────────
+function findMonthBlocks(data) {
+  const SEARCH = [
+    'СЕНТЯБРЬ 2025','ОКТЯБРЬ 2025','НОЯБРЬ 2025','ДЕКАБРЬ 2025',
+    'ЯНВАРЬ 2026','ФЕВРАЛЬ 2026','МАРТ 2026','АПРЕЛЬ 2026',
+  ];
+  const blocks = [];
+  for (let r = 0; r < data.length; r++) {
+    const v = String(data[r][0]||'').trim().toUpperCase();
+    for (let ki = 0; ki < SEARCH.length; ki++) {
+      const km = SEARCH[ki];
+      const parts = km.split(' ');
+      if (v === km || (v.startsWith(parts[0]) && v.includes(parts[1]))) {
+        blocks.push({ headerRow: r, label: km, year: parseInt(parts[1]), month: ki < 4 ? ki+9 : ki-3 });
+        break;
+      }
+    }
+  }
+  return blocks;
+}
+
+function extractMetrics(data, blockStart, blockEnd) {
+  const result = {};
+  for (let r = blockStart + 1; r < Math.min(blockEnd, blockStart + 60); r++) {
+    const label = String(data[r][0]||'').trim();
+    for (const metric of METRICS) {
+      if (label === metric) {
+        const isP = metric.startsWith('%');
+        const vals = [];
+        for (let c = 1; c < data[r].length; c++) {
+          const raw = data[r][c];
+          if (raw === null || raw === '' || raw === undefined) continue;
+          const n = parseFloat(String(raw).replace('%','').replace(',','.').replace(/\s/g,''));
+          if (!isNaN(n) && n > 0) vals.push(n);
+        }
+        if (vals.length) result[metric] = isP ? vals.reduce((a,b)=>a+b,0)/vals.length : vals.reduce((a,b)=>a+b,0);
+        break;
+      }
+    }
+  }
+  return result;
+}
+
+// Предпросмотр в модальном окне (старая версия)
+function showDashboard() { openDashboard(); }
+function createDashboard() { publishToGitHub(); }
