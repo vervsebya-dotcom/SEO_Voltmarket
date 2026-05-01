@@ -1,154 +1,159 @@
-// ============================================================
-// VOLT-MARKET SEO DASHBOARD — публикация на GitHub Pages
-// ============================================================
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SEO Дашборд — Вольтмаркет</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',Arial,sans-serif;background:#eef1f5;color:#2c3e50}
+.topbar{background:linear-gradient(135deg,#1a73e8,#1557b0);color:#fff;padding:18px 28px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+.topbar h1{font-size:20px;font-weight:700}
+.topbar p{font-size:12px;opacity:.75;margin-top:3px}
+.refresh-btn{background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.4);color:#fff;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600}
+.refresh-btn:hover{background:rgba(255,255,255,.3)}
+.container{max-width:1400px;margin:0 auto;padding:24px 20px 60px}
+.section-title{background:#1a73e8;color:#fff;padding:11px 18px;border-radius:7px;font-size:14px;font-weight:700;margin:28px 0 16px}
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin-bottom:8px}
+.kpi-card{background:#fff;border-radius:10px;padding:16px 18px;box-shadow:0 1px 4px rgba(0,0,0,.08);border-left:4px solid #1a73e8}
+.kpi-label{font-size:11px;color:#888;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px}
+.kpi-value{font-size:24px;font-weight:700;color:#1a73e8}
+.kpi-delta{font-size:11px;margin-top:5px}
+.table-wrap{background:#fff;border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,.08);overflow:auto;max-height:520px}
+table{border-collapse:collapse;font-size:12px;min-width:900px;width:100%}
+thead tr{background:#34495e;color:#fff;position:sticky;top:0;z-index:2}
+th{padding:11px 10px;text-align:right;white-space:nowrap;font-weight:600}
+th:first-child{text-align:left;min-width:190px;position:sticky;left:0;background:#34495e}
+.val-row td:first-child{font-weight:700;background:inherit;position:sticky;left:0;border-right:1px solid #ddd}
+.sub-row td{font-size:11px;color:#888}
+.sub-row td:first-child{padding-left:22px;background:inherit;position:sticky;left:0;border-right:1px solid #ddd}
+td{padding:7px 10px;text-align:right;border-bottom:1px solid #f0f0f0}
+.val-row td{font-weight:600;font-size:13px}
+.up{color:#1e8449}.dn{color:#c0392b}.na{color:#aaa}
+.charts-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.chart-card{background:#fff;border-radius:10px;padding:18px 20px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+.chart-card.wide{grid-column:1/-1}
+.chart-title{font-size:13px;font-weight:700;color:#2c3e50;margin-bottom:14px}
+.chart-wrap{position:relative;height:260px}
+.loading{text-align:center;padding:60px;color:#888;font-size:16px;background:#fff;border-radius:10px}
+.error{text-align:center;padding:40px;color:#c0392b;font-size:14px;background:#fff;border-radius:10px}
+@media(max-width:700px){.charts-grid{grid-template-columns:1fr}.chart-card.wide{grid-column:1}}
+</style>
+</head>
+<body>
 
-const METRICS = [
-  'Трафик Поиск','Коммерческий','% Коммерческий',
-  'Информационный','% Информационный',
-  'Орг трафик (Яндекс)','Орг трафик (Гугл)',
-];
+<div class="topbar">
+  <div>
+    <h1>📊 SEO Дашборд — Вольтмаркет</h1>
+    <p id="updated">Загрузка данных...</p>
+  </div>
+  <div style="display:flex;align-items:center;gap:12px">
+    <span id="months-count" style="font-size:13px;opacity:.8"></span>
+    <button class="refresh-btn" onclick="loadData()">↻ Обновить</button>
+  </div>
+</div>
 
-const KNOWN_MONTHS_FULL = [
-  { label: 'Сен 2025', year: 2025, month: 9  },
-  { label: 'Окт 2025', year: 2025, month: 10 },
-  { label: 'Ноя 2025', year: 2025, month: 11 },
-  { label: 'Дек 2025', year: 2025, month: 12 },
-  { label: 'Янв 2026', year: 2026, month: 1  },
-  { label: 'Фев 2026', year: 2026, month: 2  },
-  { label: 'Мар 2026', year: 2026, month: 3  },
-  { label: 'Апр 2026', year: 2026, month: 4  },
-];
+<div class="container">
+  <div id="content"><div class="loading">⏳ Загрузка данных...</div></div>
+</div>
 
-const GITHUB_OWNER = 'vervsebya-dotcom';
-const GITHUB_REPO  = 'SEO_Voltmarket';
-const GITHUB_FILE  = 'data.json';
-// Вставьте ваш GitHub Personal Access Token:
-const GITHUB_TOKEN = 'ВАШ_GITHUB_TOKEN';
+<script>
+const METRICS = ['Трафик Поиск','Коммерческий','% Коммерческий','Информационный','% Информационный','Орг трафик (Яндекс)','Орг трафик (Гугл)'];
+let charts = [];
 
-// ────────────────────────────────────────────────────────────
-function onOpen() {
-  SpreadsheetApp.getUi()
-    .createMenu('📊 SEO Дашборд')
-    .addItem('🌐 Открыть дашборд', 'openDashboard')
-    .addItem('🚀 Опубликовать на GitHub', 'publishToGitHub')
-    .addSeparator()
-    .addItem('👁 Предпросмотр', 'showDashboard')
-    .addToUi();
+async function loadData() {
+  try {
+    const res  = await fetch('data.json?v=' + Date.now());
+    const json = await res.json();
+    if (!json.months || !json.months.length) {
+      document.getElementById('content').innerHTML = '<div class="error">Нет данных. Запустите «Опубликовать на GitHub» в Google Sheets.</div>';
+      return;
+    }
+    render(json);
+  } catch(e) {
+    document.getElementById('content').innerHTML = '<div class="error">Ошибка загрузки: ' + e.message + '</div>';
+  }
 }
 
-function openDashboard() {
-  const url = 'https://vervsebya-dotcom.github.io/SEO_Voltmarket/';
-  const html = HtmlService.createHtmlOutput(
-    `<script>window.open('${url}','_blank');google.script.host.close();</script>`
-  ).setWidth(10).setHeight(10);
-  SpreadsheetApp.getUi().showModalDialog(html, 'Открываю...');
+function fmt(v, isP) {
+  if (v == null) return '—';
+  return isP ? v.toFixed(1) + '%' : Math.round(v).toLocaleString('ru');
 }
 
-// ────────────────────────────────────────────────────────────
-function publishToGitHub() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const seoSheet = ss.getSheetByName('SEO');
-  if (!seoSheet) { SpreadsheetApp.getUi().alert('Нет листа SEO!'); return; }
+function deltaHtml(cur, prev, isP) {
+  if (cur == null || prev == null || prev === 0) return '<span class="na">—</span>';
+  const diff = cur - prev, pct = (diff / Math.abs(prev)) * 100;
+  const sign = diff >= 0 ? '+' : '', arr = diff >= 0 ? '▲' : '▼', cls = diff >= 0 ? 'up' : 'dn';
+  const dd = isP ? sign+diff.toFixed(1)+'пп' : sign+Math.round(diff).toLocaleString('ru');
+  return `<span class="${cls}">${arr} ${dd} (${sign}${pct.toFixed(1)}%)</span>`;
+}
 
-  const data = seoSheet.getDataRange().getValues();
-  const monthBlocks = findMonthBlocks(data);
-  if (!monthBlocks.length) { SpreadsheetApp.getUi().alert('Месяцы не найдены!'); return; }
+function render(json) {
+  const months = json.months;
+  document.getElementById('updated').textContent  = 'Обновлено: ' + (json.updated || '—');
+  document.getElementById('months-count').textContent = months.length + ' месяцев';
 
-  const months = monthBlocks.map((block, i) => {
-    const nextRow = (i + 1 < monthBlocks.length) ? monthBlocks[i+1].headerRow : data.length;
-    const m = extractMetrics(data, block.headerRow, nextRow);
-    return {
-      label:   KNOWN_MONTHS_FULL[i] ? KNOWN_MONTHS_FULL[i].label : block.label,
-      year:    block.year,
-      month:   block.month,
-      metrics: m,
-    };
+  const last = months[months.length-1], prev = months.length > 1 ? months[months.length-2] : null;
+  const kpiM = ['Трафик Поиск','Коммерческий','Информационный','Орг трафик (Яндекс)','Орг трафик (Гугл)'];
+  let kpi = '';
+  kpiM.forEach(m => {
+    const v = last.metrics[m], p = prev ? prev.metrics[m] : null;
+    let dH = '';
+    if (v != null && p != null && p !== 0) {
+      const diff = v-p, pct = (diff/Math.abs(p))*100, cls = diff>=0?'up':'dn', arr = diff>=0?'▲':'▼', sign = diff>=0?'+':'';
+      dH = `<div class="kpi-delta"><span class="${cls}">${arr} ${sign}${pct.toFixed(1)}% к пред. мес.</span></div>`;
+    }
+    kpi += `<div class="kpi-card"><div class="kpi-label">${m}</div><div class="kpi-value">${v!=null?Math.round(v).toLocaleString('ru'):'—'}</div>${dH}</div>`;
   });
 
-  const payload = {
-    updated: new Date().toLocaleString('ru-RU'),
-    months:  months,
-  };
+  let tbl = `<table><thead><tr><th>Показатель</th>${months.map(m=>`<th>${m.label}</th>`).join('')}</tr></thead><tbody>`;
+  METRICS.forEach((metric, mi) => {
+    const isP = metric.startsWith('%'), bg = mi%2===0?'#f8f9fa':'#fff', bg2 = mi%2===0?'#f0f2f5':'#f8f9fa';
+    tbl += `<tr class="val-row" style="background:${bg}"><td>${metric}</td>${months.map(m=>{const v=m.metrics[metric];return`<td>${v!=null?fmt(v,isP):'<span class="na">—</span>'}</td>`}).join('')}</tr>`;
+    tbl += `<tr class="sub-row" style="background:${bg2}"><td>↕ к пред. мес.</td><td><span class="na">—</span></td>${months.slice(1).map((m,i)=>`<td>${deltaHtml(m.metrics[metric],months[i].metrics[metric],isP)}</td>`).join('')}</tr>`;
+    tbl += `<tr class="sub-row" style="background:${bg2};border-bottom:3px solid #e0e4ea"><td>↕ к аналог. пр. г.</td>${months.map(m=>{const py=months.find(x=>x.month===m.month&&x.year===m.year-1);return`<td>${py?deltaHtml(m.metrics[metric],py.metrics[metric],isP):'<span class="na">н/д</span>'}</td>`}).join('')}</tr>`;
+  });
+  tbl += '</tbody></table>';
 
-  const json    = JSON.stringify(payload, null, 2);
-  const encoded = Utilities.base64Encode(Utilities.newBlob(json).getBytes());
+  charts.forEach(c => c.destroy()); charts = [];
+  const labels = months.map(m => m.label);
+  const s = m => months.map(x => { const v=x.metrics[m]; return v!=null?(m.startsWith('%')?+v.toFixed(2):Math.round(v)):0; });
+  const opts = { responsive:true, maintainAspectRatio:false,
+    plugins:{ legend:{ position:'bottom', labels:{font:{size:11},boxWidth:12,padding:14} } },
+    scales:{ x:{ticks:{font:{size:10},maxRotation:30},grid:{color:'rgba(0,0,0,.05)'}}, y:{beginAtZero:false,ticks:{font:{size:10}},grid:{color:'rgba(0,0,0,.07)'}} },
+    elements:{ point:{radius:5,hoverRadius:7}, line:{tension:0.35,borderWidth:2.5} },
+    interaction:{mode:'index',intersect:false} };
 
-  // Получаем SHA текущего файла (нужен для обновления)
-  let sha = null;
-  try {
-    const getResp = UrlFetchApp.fetch(
-      `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${GITHUB_FILE}`,
-      { headers: { Authorization: 'token ' + GITHUB_TOKEN, Accept: 'application/vnd.github.v3+json' }, muteHttpExceptions: true }
-    );
-    if (getResp.getResponseCode() === 200) {
-      sha = JSON.parse(getResp.getContentText()).sha;
-    }
-  } catch(e) {}
+  document.getElementById('content').innerHTML = `
+    <div class="section-title">Итоги последнего месяца — ${last.label}</div>
+    <div class="kpi-grid">${kpi}</div>
+    <div class="section-title">Сводная таблица</div>
+    <div class="table-wrap">${tbl}</div>
+    <div class="section-title">Графики динамики</div>
+    <div class="charts-grid">
+      <div class="chart-card wide"><div class="chart-title">Трафик поиска по месяцам</div><div class="chart-wrap"><canvas id="c1"></canvas></div></div>
+      <div class="chart-card"><div class="chart-title">Коммерческий и информационный</div><div class="chart-wrap"><canvas id="c2"></canvas></div></div>
+      <div class="chart-card"><div class="chart-title">% Коммерческого и информационного</div><div class="chart-wrap"><canvas id="c3"></canvas></div></div>
+    </div>`;
 
-  // Пушим файл
-  const body = { message: 'Update SEO data ' + new Date().toISOString(), content: encoded };
-  if (sha) body.sha = sha;
-
-  const resp = UrlFetchApp.fetch(
-    `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${GITHUB_FILE}`,
-    {
-      method: 'PUT',
-      headers: { Authorization: 'token ' + GITHUB_TOKEN, Accept: 'application/vnd.github.v3+json', 'Content-Type': 'application/json' },
-      payload: JSON.stringify(body),
-      muteHttpExceptions: true,
-    }
-  );
-
-  if (resp.getResponseCode() === 200 || resp.getResponseCode() === 201) {
-    SpreadsheetApp.getUi().alert('✅ Данные опубликованы!\n\nhttps://vervsebya-dotcom.github.io/SEO_Voltmarket/\n\nОбновление займёт ~1 минуту.');
-  } else {
-    SpreadsheetApp.getUi().alert('❌ Ошибка: ' + resp.getContentText());
-  }
+  const mk = (id, ds) => charts.push(new Chart(document.getElementById(id), {type:'line', options:structuredClone(opts), data:{labels, datasets:ds}}));
+  mk('c1',[
+    {label:'Трафик Поиск',        data:s('Трафик Поиск'),        borderColor:'#1a73e8',backgroundColor:'rgba(26,115,232,.10)',fill:true},
+    {label:'Орг трафик (Яндекс)', data:s('Орг трафик (Яндекс)'), borderColor:'#e8710a',backgroundColor:'transparent',fill:false},
+    {label:'Орг трафик (Гугл)',   data:s('Орг трафик (Гугл)'),   borderColor:'#0f9d58',backgroundColor:'transparent',fill:false},
+  ]);
+  mk('c2',[
+    {label:'Коммерческий',   data:s('Коммерческий'),   borderColor:'#1a73e8',backgroundColor:'rgba(26,115,232,.08)',fill:true},
+    {label:'Информационный', data:s('Информационный'), borderColor:'#e8710a',backgroundColor:'transparent',fill:false},
+  ]);
+  mk('c3',[
+    {label:'% Коммерческий',   data:s('% Коммерческий'),   borderColor:'#1a73e8',backgroundColor:'rgba(26,115,232,.08)',fill:true},
+    {label:'% Информационный', data:s('% Информационный'), borderColor:'#e8710a',backgroundColor:'transparent',fill:false},
+  ]);
 }
 
-// ────────────────────────────────────────────────────────────
-function findMonthBlocks(data) {
-  const SEARCH = [
-    'СЕНТЯБРЬ 2025','ОКТЯБРЬ 2025','НОЯБРЬ 2025','ДЕКАБРЬ 2025',
-    'ЯНВАРЬ 2026','ФЕВРАЛЬ 2026','МАРТ 2026','АПРЕЛЬ 2026',
-  ];
-  const blocks = [];
-  for (let r = 0; r < data.length; r++) {
-    const v = String(data[r][0]||'').trim().toUpperCase();
-    for (let ki = 0; ki < SEARCH.length; ki++) {
-      const km = SEARCH[ki];
-      const parts = km.split(' ');
-      if (v === km || (v.startsWith(parts[0]) && v.includes(parts[1]))) {
-        blocks.push({ headerRow: r, label: km, year: parseInt(parts[1]), month: ki < 4 ? ki+9 : ki-3 });
-        break;
-      }
-    }
-  }
-  return blocks;
-}
-
-function extractMetrics(data, blockStart, blockEnd) {
-  const result = {};
-  for (let r = blockStart + 1; r < Math.min(blockEnd, blockStart + 60); r++) {
-    const label = String(data[r][0]||'').trim();
-    for (const metric of METRICS) {
-      if (label === metric) {
-        const isP = metric.startsWith('%');
-        const vals = [];
-        for (let c = 1; c < data[r].length; c++) {
-          const raw = data[r][c];
-          if (raw === null || raw === '' || raw === undefined) continue;
-          const n = parseFloat(String(raw).replace('%','').replace(',','.').replace(/\s/g,''));
-          if (!isNaN(n) && n > 0) vals.push(n);
-        }
-        if (vals.length) result[metric] = isP ? vals.reduce((a,b)=>a+b,0)/vals.length : vals.reduce((a,b)=>a+b,0);
-        break;
-      }
-    }
-  }
-  return result;
-}
-
-// Предпросмотр в модальном окне (старая версия)
-function showDashboard() { openDashboard(); }
-function createDashboard() { publishToGitHub(); }
+loadData();
+</script>
+</body>
+</html>
